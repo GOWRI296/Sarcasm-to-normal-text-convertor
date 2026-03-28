@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SarcasmLens — NLP Sarcasm Converter</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Unbounded:wght@300;600;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #12121a;
+    --card: #1a1a26;
+    --border: #2a2a3e;
+    --accent: #ff3f6c;
+    --accent2: #7c3aed;
+    --accent3: #06b6d4;
+    --text: #e8e8f0;
+    --muted: #6b6b8a;
+    --success: #10b981;
+    --mono: 'Space Mono', monospace;
+    --display: 'Unbounded', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Animated noise grain overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 999;
+    opacity: 0.4;
+  }
+
+  /* Grid background */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: 
+      linear-gradient(rgba(255,63,108,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,63,108,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    position: relative;
+    z-index: 1;
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+  }
+
+  /* Header */
+  header {
+    text-align: center;
+    margin-bottom: 56px;
+    animation: fadeDown 0.8s ease both;
+  }
+
+  .badge {
+    display: inline-block;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    padding: 4px 12px;
+    margin-bottom: 20px;
+    animation: pulse 2s ease infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  h1 {
+    font-family: var(--display);
+    font-size: clamp(2rem, 6vw, 4rem);
+    font-weight: 900;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    background: linear-gradient(135deg, #fff 0%, var(--accent) 50%, var(--accent2) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 14px;
+  }
+
+  .subtitle {
+    color: var(--muted);
+    font-size: 13px;
+    letter-spacing: 0.05em;
+  }
+
+  /* Main converter card */
+  .converter {
+    background: var(--card);
+    border: 1px solid var(--border);
+    position: relative;
+    overflow: hidden;
+    animation: fadeUp 0.8s 0.2s ease both;
+  }
+
+  .converter::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2), var(--accent3));
+  }
+
+  .panels {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+  }
+
+  @media (max-width: 640px) {
+    .panels { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    padding: 28px;
+    position: relative;
+  }
+
+  .panel:first-child {
+    border-right: 1px solid var(--border);
+  }
+
+  @media (max-width: 640px) {
+    .panel:first-child {
+      border-right: none;
+      border-bottom: 1px solid var(--border);
+    }
+  }
+
+  .panel-label {
+    font-size: 9px;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .panel-label::before {
+    content: '';
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+  }
+
+  .input-panel .panel-label::before { background: var(--accent); }
+  .output-panel .panel-label::before { background: var(--success); }
+
+  textarea {
+    width: 100%;
+    background: transparent;
+    border: none;
+    outline: none;
+    resize: none;
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--text);
+    line-height: 1.7;
+    min-height: 160px;
+    caret-color: var(--accent);
+  }
+
+  textarea::placeholder { color: var(--muted); }
+
+  .output-text {
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--success);
+    line-height: 1.7;
+    min-height: 160px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .output-placeholder {
+    color: var(--muted);
+    font-style: italic;
+  }
+
+  /* Controls bar */
+  .controls {
+    border-top: 1px solid var(--border);
+    padding: 20px 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .char-count {
+    font-size: 11px;
+    color: var(--muted);
+    font-family: var(--mono);
+  }
+
+  .btn-convert {
+    background: var(--accent);
+    color: white;
+    border: none;
+    font-family: var(--display);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 14px 32px;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.2s;
+    clip-path: polygon(6px 0%, 100% 0%, calc(100% - 6px) 100%, 0% 100%);
+  }
+
+  .btn-convert:hover {
+    background: #ff1a50;
+    transform: translateY(-1px);
+    box-shadow: 0 8px 24px rgba(255,63,108,0.4);
+  }
+
+  .btn-convert:active { transform: translateY(0); }
+
+  .btn-convert:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
+
+  .btn-convert .loading {
+    display: none;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .btn-convert.is-loading .label { display: none; }
+  .btn-convert.is-loading .loading { display: flex; }
+
+  .spinner {
+    width: 12px;
+    height: 12px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Examples section */
+  .examples {
+    margin-top: 40px;
+    animation: fadeUp 0.8s 0.4s ease both;
+  }
+
+  .examples-label {
+    font-size: 9px;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 16px;
+  }
+
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .chip {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 8px 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+    line-height: 1.4;
+  }
+
+  .chip:hover {
+    border-color: var(--accent);
+    color: var(--text);
+    background: rgba(255,63,108,0.06);
+  }
+
+  /* Analysis section */
+  .analysis {
+    margin-top: 24px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 20px 24px;
+    display: none;
+    animation: fadeUp 0.4s ease both;
+  }
+
+  .analysis.visible { display: block; }
+
+  .analysis-title {
+    font-size: 9px;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--accent2);
+    margin-bottom: 14px;
+  }
+
+  .analysis-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+  }
+
+  .metric {
+    background: var(--card);
+    border: 1px solid var(--border);
+    padding: 14px;
+  }
+
+  .metric-label {
+    font-size: 9px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+
+  .metric-value {
+    font-family: var(--display);
+    font-size: 20px;
+    font-weight: 600;
+  }
+
+  .metric-value.high { color: var(--accent); }
+  .metric-value.med { color: #f59e0b; }
+  .metric-value.low { color: var(--success); }
+
+  /* Copy button */
+  .btn-copy {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 6px 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-top: 12px;
+  }
+
+  .btn-copy:hover {
+    border-color: var(--success);
+    color: var(--success);
+  }
+
+  /* Error */
+  .error-msg {
+    color: var(--accent);
+    font-size: 12px;
+    margin-top: 8px;
+    display: none;
+  }
+
+  .error-msg.visible { display: block; }
+
+  /* Footer */
+  footer {
+    text-align: center;
+    margin-top: 60px;
+    color: var(--muted);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    animation: fadeUp 0.8s 0.6s ease both;
+  }
+
+  footer span { color: var(--accent); }
+
+  /* Animations */
+  @keyframes fadeDown {
+    from { opacity: 0; transform: translateY(-20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Typewriter cursor on output */
+  .typing::after {
+    content: '▋';
+    color: var(--success);
+    animation: blink 0.8s step-end infinite;
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+  }
+
+  /* Tone selector */
+  .tone-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .tone-label {
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .tone-btn {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 5px 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .tone-btn.active {
+    border-color: var(--accent2);
+    color: var(--accent2);
+    background: rgba(124,58,237,0.1);
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <div class="badge">NLP Project · Sarcasm Detection</div>
+    <h1>SarcasmLens</h1>
+    <p class="subtitle">// paste sarcastic text → get the real meaning</p>
+  </header>
+
+  <div class="converter">
+    <div class="panels">
+      <!-- Input -->
+      <div class="panel input-panel">
+        <div class="panel-label">sarcastic input</div>
+        <textarea id="inputText" placeholder="Oh sure, because THAT worked out SO well last time..." maxlength="1000"></textarea>
+      </div>
+
+      <!-- Output -->
+      <div class="panel output-panel">
+        <div class="panel-label">literal translation</div>
+        <div id="outputText" class="output-text output-placeholder">awaiting conversion...</div>
+        <button class="btn-copy" id="copyBtn" style="display:none" onclick="copyOutput()">[ copy ]</button>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <span class="char-count" id="charCount">0 / 1000 chars</span>
+        <div class="tone-row">
+          <span class="tone-label">output tone:</span>
+          <button class="tone-btn active" data-tone="neutral" onclick="setTone(this)">neutral</button>
+          <button class="tone-btn" data-tone="formal" onclick="setTone(this)">formal</button>
+          <button class="tone-btn" data-tone="simple" onclick="setTone(this)">simple</button>
+        </div>
+      </div>
+      <div>
+        <button class="btn-convert" id="convertBtn" onclick="convert()">
+          <span class="label">Convert →</span>
+          <span class="loading"><span class="spinner"></span> Analyzing...</span>
+        </button>
+        <div class="error-msg" id="errorMsg"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Analysis card -->
+  <div class="analysis" id="analysis">
+    <div class="analysis-title">// sarcasm analysis metrics</div>
+    <div class="analysis-grid">
+      <div class="metric">
+        <div class="metric-label">Sarcasm Level</div>
+        <div class="metric-value" id="sarcasmLevel">—</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Tone Shift</div>
+        <div class="metric-value" id="toneShift">—</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Implied Sentiment</div>
+        <div class="metric-value" id="impliedSentiment">—</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Irony Type</div>
+        <div class="metric-value" id="ironyType" style="font-size:14px;">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Examples -->
+  <div class="examples">
+    <div class="examples-label">// try these examples</div>
+    <div class="chips" id="exampleChips"></div>
+  </div>
+
+  <footer>
+    powered by <span>Claude AI</span> · sarcasm detection & NLP translation
+  </footer>
+</div>
+
+<script>
+const examples = [
+  "Oh great, another Monday. Just what I always wanted.",
+  "Sure, because I have NOTHING better to do.",
+  "Yeah, because that plan was SO well thought out.",
+  "Oh wow, you finished THAT in only three hours? Amazing.",
+  "Because clearly the universe revolves around you.",
+  "Sure, I'll just magically fix it. No problem at all.",
+  "Oh, I'm SO surprised this happened. Totally didn't see it coming.",
+  "Right, because talking more will definitely fix things.",
+];
+
+let selectedTone = 'neutral';
+
+// Populate chips
+const chipsEl = document.getElementById('exampleChips');
+examples.forEach(ex => {
+  const chip = document.createElement('button');
+  chip.className = 'chip';
+  chip.textContent = ex.length > 55 ? ex.slice(0, 55) + '…' : ex;
+  chip.title = ex;
+  chip.onclick = () => {
+    document.getElementById('inputText').value = ex;
+    updateCount();
+  };
+  chipsEl.appendChild(chip);
+});
+
+// Char counter
+const textarea = document.getElementById('inputText');
+textarea.addEventListener('input', updateCount);
+function updateCount() {
+  const len = textarea.value.length;
+  document.getElementById('charCount').textContent = `${len} / 1000 chars`;
+}
+
+function setTone(btn) {
+  document.querySelectorAll('.tone-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  selectedTone = btn.dataset.tone;
+}
+
+function copyOutput() {
+  const text = document.getElementById('outputText').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById('copyBtn');
+    btn.textContent = '[ copied! ]';
+    setTimeout(() => btn.textContent = '[ copy ]', 2000);
+  });
+}
+
+async function convert() {
+  const input = document.getElementById('inputText').value.trim();
+  const errorEl = document.getElementById('errorMsg');
+  errorEl.classList.remove('visible');
+
+  if (!input) {
+    errorEl.textContent = '⚠ paste some sarcastic text first';
+    errorEl.classList.add('visible');
+    return;
+  }
+
+  const btn = document.getElementById('convertBtn');
+  const outputEl = document.getElementById('outputText');
+  const copyBtn = document.getElementById('copyBtn');
+  const analysisEl = document.getElementById('analysis');
+
+  btn.classList.add('is-loading');
+  btn.disabled = true;
+  outputEl.className = 'output-text typing';
+  outputEl.textContent = '';
+  copyBtn.style.display = 'none';
+  analysisEl.classList.remove('visible');
+
+  const toneInstructions = {
+    neutral: 'a clear, neutral, everyday tone',
+    formal: 'a formal, professional tone',
+    simple: 'very simple, plain language as if explaining to a child',
+  };
+
+  const prompt = `You are an NLP sarcasm detection and translation system. Analyze the following sarcastic text and:
+
+1. Identify the sarcasm/irony
+2. Extract the TRUE literal meaning
+3. Analyze the text
+
+Input: "${input}"
+
+Respond ONLY with a valid JSON object (no markdown, no explanation, just raw JSON):
+{
+  "literalMeaning": "<the actual meaning in ${toneInstructions[selectedTone]}>",
+  "sarcasmLevel": "<High/Medium/Low>",
+  "toneShift": "<e.g. Negative→Fake Positive>",
+  "impliedSentiment": "<e.g. Frustrated, Disappointed, Annoyed>",
+  "ironyType": "<e.g. Verbal, Situational, Dramatic, Self-deprecating>"
+}`;
+
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1000,
+        messages: [{ role: "user", content: prompt }]
+      })
+    });
+
+    if (!response.ok) throw new Error(`API error: ${response.status}`);
+
+    const data = await response.json();
+    const raw = data.content.map(c => c.text || '').join('');
+
+    // Strip any potential markdown
+    const cleaned = raw.replace(/```json|```/g, '').trim();
+    const parsed = JSON.parse(cleaned);
+
+    // Typewriter reveal
+    outputEl.classList.remove('typing');
+    outputEl.className = 'output-text';
+    await typewriter(outputEl, parsed.literalMeaning);
+
+    // Fill metrics
+    const lvl = parsed.sarcasmLevel || '—';
+    const lvlEl = document.getElementById('sarcasmLevel');
+    lvlEl.textContent = lvl;
+    lvlEl.className = 'metric-value ' + (lvl === 'High' ? 'high' : lvl === 'Medium' ? 'med' : 'low');
+
+    document.getElementById('toneShift').textContent = parsed.toneShift || '—';
+    document.getElementById('impliedSentiment').textContent = parsed.impliedSentiment || '—';
+    document.getElementById('ironyType').textContent = parsed.ironyType || '—';
+
+    analysisEl.classList.add('visible');
+    copyBtn.style.display = 'inline-block';
+
+  } catch (err) {
+    outputEl.className = 'output-text output-placeholder';
+    outputEl.textContent = 'awaiting conversion...';
+    errorEl.textContent = '⚠ ' + (err.message || 'Something went wrong. Check your connection.');
+    errorEl.classList.add('visible');
+  } finally {
+    btn.classList.remove('is-loading');
+    btn.disabled = false;
+  }
+}
+
+async function typewriter(el, text) {
+  el.textContent = '';
+  for (let i = 0; i < text.length; i++) {
+    el.textContent += text[i];
+    if (i % 3 === 0) await sleep(18);
+  }
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// Enter key shortcut (Ctrl/Cmd + Enter)
+textarea.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') convert();
+});
+</script>
+</body>
+</html>
