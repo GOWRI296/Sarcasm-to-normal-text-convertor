@@ -31,7 +31,6 @@
     overflow-x: hidden;
   }
 
-  /* Animated noise grain overlay */
   body::before {
     content: '';
     position: fixed;
@@ -42,7 +41,6 @@
     opacity: 0.4;
   }
 
-  /* Grid background */
   body::after {
     content: '';
     position: fixed;
@@ -63,7 +61,6 @@
     padding: 40px 24px 80px;
   }
 
-  /* Header */
   header {
     text-align: center;
     margin-bottom: 56px;
@@ -106,7 +103,6 @@
     letter-spacing: 0.05em;
   }
 
-  /* Main converter card */
   .converter {
     background: var(--card);
     border: 1px solid var(--border);
@@ -202,7 +198,6 @@
     font-style: italic;
   }
 
-  /* Controls bar */
   .controls {
     border-top: 1px solid var(--border);
     padding: 20px 28px;
@@ -271,7 +266,6 @@
 
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  /* Examples section */
   .examples {
     margin-top: 40px;
     animation: fadeUp 0.8s 0.4s ease both;
@@ -309,7 +303,6 @@
     background: rgba(255,63,108,0.06);
   }
 
-  /* Analysis section */
   .analysis {
     margin-top: 24px;
     background: var(--surface);
@@ -359,7 +352,6 @@
   .metric-value.med { color: #f59e0b; }
   .metric-value.low { color: var(--success); }
 
-  /* Copy button */
   .btn-copy {
     background: transparent;
     border: 1px solid var(--border);
@@ -377,7 +369,6 @@
     color: var(--success);
   }
 
-  /* Error */
   .error-msg {
     color: var(--accent);
     font-size: 12px;
@@ -387,7 +378,6 @@
 
   .error-msg.visible { display: block; }
 
-  /* Footer */
   footer {
     text-align: center;
     margin-top: 60px;
@@ -399,7 +389,6 @@
 
   footer span { color: var(--accent); }
 
-  /* Animations */
   @keyframes fadeDown {
     from { opacity: 0; transform: translateY(-20px); }
     to { opacity: 1; transform: translateY(0); }
@@ -410,7 +399,6 @@
     to { opacity: 1; transform: translateY(0); }
   }
 
-  /* Typewriter cursor on output */
   .typing::after {
     content: '▋';
     color: var(--success);
@@ -422,7 +410,6 @@
     50% { opacity: 0; }
   }
 
-  /* Tone selector */
   .tone-row {
     display: flex;
     align-items: center;
@@ -466,13 +453,11 @@
 
   <div class="converter">
     <div class="panels">
-      <!-- Input -->
       <div class="panel input-panel">
         <div class="panel-label">sarcastic input</div>
         <textarea id="inputText" placeholder="Oh sure, because THAT worked out SO well last time..." maxlength="1000"></textarea>
       </div>
 
-      <!-- Output -->
       <div class="panel output-panel">
         <div class="panel-label">literal translation</div>
         <div id="outputText" class="output-text output-placeholder">awaiting conversion...</div>
@@ -500,7 +485,6 @@
     </div>
   </div>
 
-  <!-- Analysis card -->
   <div class="analysis" id="analysis">
     <div class="analysis-title">// sarcasm analysis metrics</div>
     <div class="analysis-grid">
@@ -523,14 +507,13 @@
     </div>
   </div>
 
-  <!-- Examples -->
   <div class="examples">
     <div class="examples-label">// try these examples</div>
     <div class="chips" id="exampleChips"></div>
   </div>
 
   <footer>
-    powered by <span>Claude AI</span> · sarcasm detection & NLP translation
+    powered by <span>Gemini</span> · sarcasm detection & NLP translation
   </footer>
 </div>
 
@@ -562,9 +545,9 @@ examples.forEach(ex => {
   chipsEl.appendChild(chip);
 });
 
-// Char counter
 const textarea = document.getElementById('inputText');
 textarea.addEventListener('input', updateCount);
+
 function updateCount() {
   const len = textarea.value.length;
   document.getElementById('charCount').textContent = `${len} / 1000 chars`;
@@ -632,31 +615,55 @@ Respond ONLY with a valid JSON object (no markdown, no explanation, just raw JSO
 }`;
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 1000,
-        messages: [{ role: "user", content: prompt }]
-      })
-    });
+    // ================== PUT YOUR GEMINI API KEY HERE ==================
+    const GEMINI_API_KEY = "AIzaSyDwfdE1cmIZmAXkYmryQU_Kb29m0cqTE2Y";   // ←←← CHANGE THIS
 
-    if (!response.ok) throw new Error(`API error: ${response.status}`);
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{ text: prompt }]
+          }],
+          generationConfig: {
+            response_mime_type: "application/json",
+            temperature: 0.7,
+            maxOutputTokens: 800
+          }
+        })
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`API Error: ${response.status}`);
+    }
 
     const data = await response.json();
-    const raw = data.content.map(c => c.text || '').join('');
+    const raw = data.candidates[0].content.parts[0].text;
 
-    // Strip any potential markdown
+    // Clean and parse JSON
     const cleaned = raw.replace(/```json|```/g, '').trim();
-    const parsed = JSON.parse(cleaned);
+    let parsed;
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch (e) {
+      parsed = {
+        literalMeaning: raw.trim(),
+        sarcasmLevel: "Medium",
+        toneShift: "Unknown",
+        impliedSentiment: "Unknown",
+        ironyType: "Verbal"
+      };
+    }
 
-    // Typewriter reveal
+    // Typewriter effect
     outputEl.classList.remove('typing');
     outputEl.className = 'output-text';
-    await typewriter(outputEl, parsed.literalMeaning);
+    await typewriter(outputEl, parsed.literalMeaning || "No translation available.");
 
-    // Fill metrics
+    // Update metrics
     const lvl = parsed.sarcasmLevel || '—';
     const lvlEl = document.getElementById('sarcasmLevel');
     lvlEl.textContent = lvl;
@@ -670,9 +677,10 @@ Respond ONLY with a valid JSON object (no markdown, no explanation, just raw JSO
     copyBtn.style.display = 'inline-block';
 
   } catch (err) {
+    console.error(err);
     outputEl.className = 'output-text output-placeholder';
     outputEl.textContent = 'awaiting conversion...';
-    errorEl.textContent = '⚠ ' + (err.message || 'Something went wrong. Check your connection.');
+    errorEl.textContent = '⚠ ' + (err.message || 'Something went wrong. Check your Gemini API key and internet.');
     errorEl.classList.add('visible');
   } finally {
     btn.classList.remove('is-loading');
@@ -688,9 +696,11 @@ async function typewriter(el, text) {
   }
 }
 
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+function sleep(ms) {
+  return new Promise(r => setTimeout(r, ms));
+}
 
-// Enter key shortcut (Ctrl/Cmd + Enter)
+// Ctrl/Cmd + Enter shortcut
 textarea.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') convert();
 });
